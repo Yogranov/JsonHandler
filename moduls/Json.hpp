@@ -7,76 +7,22 @@
 
 #include <optional>
 #include <cstdio>
+#include <variant>
+#include <array>
 #include "../cJSON/cJSON.h"
 #include "../cJSON/cJSON.h"
-
-template<class TYPE>
-void Set(const char* key, TYPE value, cJSON *json) {
-    if constexpr(std::is_same_v<TYPE, bool>){
-        cJSON_AddBoolToObject(json, key, value);
-    }
-
-    else if constexpr(std::is_integral_v<TYPE> || std::is_same_v<TYPE, float> || std::is_same_v<TYPE, double>) {
-        cJSON_AddNumberToObject(json, key, value);
-    }
-
-    else if constexpr (std::is_pointer_v<TYPE>) {
-        cJSON_AddStringToObject(json, key, value);
-    }
-}
-
-template<class TYPE>
-std::optional<TYPE> Get(cJSON *json) {
-    if constexpr(std::is_same_v<TYPE, bool>){
-        if(cJSON_IsBool(json)){
-            return cJSON_IsTrue(json);
-        }
-    }
-
-    else if constexpr(std::is_integral_v<TYPE> || std::is_same_v<TYPE, float> || std::is_same_v<TYPE, double>) {
-        if(cJSON_IsNumber(json)){
-            return cJSON_GetNumberValue(json);
-        }
-    }
-
-    else if constexpr (std::is_pointer_v<TYPE>) {
-        if(cJSON_IsString(json)){
-            return cJSON_GetStringValue(json);
-        }
-    }
-
-    return {};
-}
-
 
 class Json {
-    //constructors
-    public:
-    Json() : m_json(cJSON_CreateObject()){};
-    Json(const Json &other) : m_json(cJSON_Duplicate(other.m_json, true)){};
-    Json(Json &&other) : m_json(other.m_json){other.m_json = cJSON_CreateObject();};
-    Json(cJSON *json) : m_json(json){};
-    Json(const char* json) : m_json(cJSON_Parse(json)) {};
 
-    ~Json() {
-        cJSON_Delete(m_json);
-    }
+    using json_var_t =  std::variant<bool, const char *, int, long,long long, float, double>;
 
-    Json &operator = (const Json &other) {
-        cJSON_Delete(m_json);
-        m_json = cJSON_Duplicate(other.m_json, true);
-
-        return *this;
-    }
-    private:
     class JsonField {
     public:
         JsonField(const char *field, cJSON *json) : m_field(field), m_json(json){};
 
         template<class T>
         operator std::optional<T>() {
-            auto j = cJSON_GetObjectItem(m_json, m_field);
-            Get<T>(j);
+            return Get<T>(cJSON_GetObjectItem(m_json, m_field));
         }
 
         template<class T>
@@ -89,79 +35,117 @@ class Json {
         cJSON *m_json;
     };
 
+
+    //constructors
     public:
-    // set
+    Json() : m_json(cJSON_CreateObject()){};
+    Json(const Json &other) : m_json(cJSON_Duplicate(other.m_json, true)){};
+    Json(Json &&other) : m_json(other.m_json){other.m_json = cJSON_CreateObject();};
+    Json(cJSON *json) : m_json(json){};
+    Json(char* json) : m_json(cJSON_Parse(json)) {};
+
+    template<class T>
+    Json(T type) {
+        if constexpr(std::is_same_v<T, bool>){
+            m_json = cJSON_CreateBool( type);
+        }
+
+        else if constexpr(std::is_integral_v<T> || std::is_same_v<T, float> || std::is_same_v<T, double>) {
+            m_json = cJSON_CreateNumber(type);
+        }
+
+        else if constexpr (std::is_pointer_v<T>) {
+            m_json = cJSON_CreateString(type);
+        }
+
+        else if constexpr(std::is_same_v<T, Json>){
+            cJSON *newObj = cJSON_Duplicate(type.GetcJSON(), true);
+            cJSON_AddItemToObject(m_json, NULL, newObj);
+        }
+    };
+
+    Json(std::initializer_list<Json> list) : m_json(cJSON_CreateArray()){
+        for(Json item : list) {
+            cJSON_AddItemToArray(m_json, cJSON_Duplicate(item.GetcJSON(), true));
+        }
+    };
+
+    ~Json() {
+        cJSON_Delete(m_json);
+    }
+
+
+
+    ////////// Operators  //////////
+    Json &operator = (const Json &other) {
+        cJSON_Delete(m_json);
+        m_json = cJSON_Duplicate(other.m_json, true);
+
+        return *this;
+    }
+
+    // Set
     JsonField operator[] (const char *key) {
         return JsonField(key, m_json);
     }
 
-    // get
-    JsonField operator[] (const char *key) const {
-        return JsonField(key, m_json);
-    }
-
-private:
+    private:
     // members
     cJSON *m_json;
 
     //functions
     public:
 
-    cJSON *GetObject() {
+    /// static functions
+    template<class TYPE>
+    static std::optional<TYPE> Get(cJSON *json) {
+        if constexpr(std::is_same_v<TYPE, bool>){
+            if(cJSON_IsBool(json)){
+                return cJSON_IsTrue(json);
+            }
+        }
+
+        else if constexpr(std::is_integral_v<TYPE> || std::is_same_v<TYPE, float> || std::is_same_v<TYPE, double>) {
+            if(cJSON_IsNumber(json)){
+                double tmp = cJSON_GetNumberValue(json);
+                return tmp;
+            }
+        }
+
+        else if constexpr (std::is_pointer_v<TYPE>) {
+            if(cJSON_IsString(json)){
+                return cJSON_GetStringValue(json);
+            }
+        }
+
+        return {};
+    }
+
+    template<class TYPE>
+    static void Set(const char* key, TYPE value, cJSON *json) {
+        if constexpr(std::is_same_v<TYPE, bool>){
+            cJSON_AddBoolToObject(json, key, value);
+        }
+
+        else if constexpr(std::is_integral_v<TYPE> || std::is_same_v<TYPE, float> || std::is_same_v<TYPE, double>) {
+            cJSON_AddNumberToObject(json, key, value);
+        }
+
+        else if constexpr (std::is_pointer_v<TYPE>) {
+            cJSON_AddStringToObject(json, key, value);
+        }
+
+        else if constexpr(std::is_same_v<TYPE, Json>){
+            cJSON *newObj = cJSON_Duplicate(value.GetcJSON(), true);
+            cJSON_AddItemToObject(json, key, newObj);
+        }
+    }
+
+
+    ////// functions /////
+
+    cJSON *GetcJSON() {
         return m_json;
-    }
-
-    template<class TYPE>
-    std::optional<TYPE> GetValue() {
-        Get<TYPE>(m_json);
-//        if (IsNull()) {
-//            return {};
-//        }
-//
-//        if constexpr(std::is_same_v<TYPE, bool>){
-//            if(cJSON_IsBool(m_json)){
-//                return cJSON_IsTrue(m_json);
-//            }
-//        }
-//
-//        if constexpr(std::is_integral_v<TYPE> || std::is_same_v<TYPE, float> || std::is_same_v<TYPE, double>) {
-//            if(cJSON_IsNumber(m_json)){
-//                return cJSON_GetNumberValue(m_json);
-//            }
-//        }
-//
-//        if constexpr (std::is_pointer_v<TYPE>) {
-//            if(cJSON_IsString(m_json)){
-//                return cJSON_GetStringValue(m_json);
-//            }
-//        }
-//
-//        return {};
-    }
-
-    template<class TYPE>
-    void AddNewObject(const char* key, TYPE value) {
-        Set(key,  value, m_json);
-
-
-//        if constexpr(std::is_same_v<TYPE, bool>){
-//            cJSON_AddBoolToObject(m_json, key, value);
-//        }
-//
-//        else if constexpr(std::is_integral_v<TYPE> || std::is_same_v<TYPE, float> || std::is_same_v<TYPE, double>) {
-//            cJSON_AddNumberToObject(m_json, key, value);
-//        }
-//
-//        else if constexpr (std::is_pointer_v<TYPE>) {
-//            cJSON_AddStringToObject(m_json, key, value);
-//        }
-    }
-
-
-
-
-    cJSON *GetFirstMatch() {
-        return nullptr;
     }
 
     bool HaveChildren() {

@@ -2267,6 +2267,8 @@ CJSON_PUBLIC(cJSON*) cJSON_CreateStringArray(const char* const* strings, int cou
 
 /* Duplication */
 CJSON_PUBLIC(cJSON*) cJSON_Duplicate(const cJSON* item, cJSON_bool recurse) {
+    static int dup = 0;
+    printf("Duplicate num %d\n", ++dup);
     cJSON* newitem = NULL;
     cJSON* child = NULL;
     cJSON* next = NULL;
