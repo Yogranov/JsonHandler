@@ -2,6 +2,8 @@
 #include "cJSON/cJSON.h"
 #include <cstdlib>
 
+
+
 void *operator new(size_t size) {
     return malloc(size);
 }
@@ -40,40 +42,43 @@ int main() {
     change_allocators();
     {
         // Init objects
-        Json j = Json(cJSON_Parse(text));
-        Json h = Json(cJSON_Parse(text));
-        Json z = Json(cJSON_Parse(text));
+        Json j = text;
+        Json h = text;
+        Json z = text;
 
-        // Adding regular field
+        // Adding a regular field
         j["newNum"] = 15;
 
-        // Adding array
-        h["json"] << Json({1,2,3});
+        // Adding an array
+        h["json"] = {1,2,3};
 
-        // Rewrite on same key
+        // Rewrite to the same key
         h["json"] = 44;
 
         // Adding advance array
-        h["arr"] << Json({1.1, &j,3, "HEY", 4, 8});
+        h["arr"] = {1.1, j,3, "HEY", 4, 8};
 
-        // Inserting object into another object
-        h["test"] += z;
+        // Copying object into another object
+        h["test"] = z;
 
-        // Inserting object into another object
-        h["test1"] << z;
+        // Adding a new number in second level
+        h["test"]["sec_level"] = 4.5;
+
+        // Moving object into another object
+        h["test1"] = std::move(j);
 
         // Getting and printing field
-        std::optional<double> fs = h["my_double"];
-        if(fs) {
+        std::optional<double> fs = h["test"]["sec_level"];
+        if(fs)
             printf("fs=%lf\n", fs.value());
-        } else {
+        else
             printf("no value\n");
-        }
+
 
         // Printing the whole object
         h.Print();
     }
 
-    printf("\nAmount of leaked allocations: %d\n", memCounter);
+    printf("Amount of leaked allocations: %d\n", memCounter);
 
 }

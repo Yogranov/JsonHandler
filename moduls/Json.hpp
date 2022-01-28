@@ -7,9 +7,10 @@
 #include "../cJSON/cJSON.h"
 #include "../cJSON/cJSON.h"
 #include <cassert>
+int count = 0;
 
 class Json {
-    using json_var_t =  std::variant<bool, char *, const char *, long long, double, Json*>;
+    using json_var_t =  std::variant<bool, char *, const char *, long long, double, Json>;
 
     class JsonField {
     public:
@@ -22,27 +23,35 @@ class Json {
 
         template<class T>
         void operator = (T val) {
-            if constexpr(std::is_same_v<T, Json>)
-                assert(0);
-
             if(checkDuplication(m_json, m_field))
                 cJSON_DeleteItemFromObject(m_json, m_field);
 
             addNode(m_field, val, m_json);
         }
 
-        void operator += (Json &obj) {
+        void operator = (Json &json) {
             if(checkDuplication(m_json, m_field))
                 cJSON_DeleteItemFromObject(m_json, m_field);
 
-            cJSON_AddItemToObject(m_json, m_field, cJSON_Duplicate(obj.m_json, true));
+            addNode(m_field, json, m_json);
         }
 
-        void operator << (Json obj) {
+        void operator = (Json &&json) {
             if(checkDuplication(m_json, m_field))
                 cJSON_DeleteItemFromObject(m_json, m_field);
 
-            addNode(m_field, obj, m_json);
+            addNode(m_field, &json, m_json);
+        }
+
+        void operator = (std::initializer_list<json_var_t> list) {
+            if(checkDuplication(m_json, m_field))
+                cJSON_DeleteItemFromObject(m_json, m_field);
+
+            *this = Json{list};
+        }
+
+        JsonField operator[] (const char *key) {
+            return JsonField{key, m_json};
         }
 
     private:
@@ -53,10 +62,15 @@ class Json {
     /// ------------ Constructors ------------ ///
     public:
     Json() : m_json(cJSON_CreateObject()){};
-    Json(char* jsonString) : m_json(cJSON_Parse(jsonString)) { assert(m_json != nullptr);};
+    Json(const char* jsonString) : m_json(cJSON_Parse(jsonString)) { assert(m_json != nullptr);};
     Json(cJSON *json) : m_json(json){};
 
-    Json(Json &other) {
+    Json(const Json &other) {
+        count++;
+        m_json = cJSON_Duplicate(other.m_json,true);
+    }
+
+    Json(Json &&other) {
         m_json = other.m_json;
         other.m_json = nullptr;
     }
@@ -64,24 +78,28 @@ class Json {
     template<class T>
     Json(const char* key, T value) {
         m_json = cJSON_CreateObject();
-
         cJSON_AddItemToObject(m_json, key, createNode(value));
     };
 
-    Json(std::initializer_list<json_var_t> list) : m_json(cJSON_CreateArray()){
+    Json(std::initializer_list<json_var_t> &list) : m_json(cJSON_CreateArray()){
         for(json_var_t item : list) {
             cJSON *tmpNode{};
-            std::visit([this, &tmpNode] (const auto &arg){tmpNode = createNode(arg); }, item);
+
+            if(std::holds_alternative<Json>(item))
+                tmpNode = createNode(std::get<Json>(item));
+            else
+                std::visit([this, &tmpNode] (const auto &arg){tmpNode = createNode(arg);}, item);
+
             cJSON_AddItemToArray(m_json, tmpNode);
         }
     };
 
     /// Private constructor, use by initializer list to build an array
     private:
-    template<class T>
-    Json(T value) {
-        m_json = createNode(value);
-    };
+        template<class T>
+        Json(T value) {
+            m_json = createNode(value);
+        };
     public:
 
     ~Json() {
@@ -98,7 +116,7 @@ class Json {
     }
 
     JsonField operator[] (const char *key) {
-        return JsonField(key, m_json);
+        return JsonField{key, m_json};
     }
 
     /// members
@@ -145,21 +163,38 @@ class Json {
             cJSON_AddNumberToObject(json, key, val);
         }
 
-        else if constexpr (std::is_pointer_v<T>) {
+        else if constexpr(std::is_same_v<T, Json*>){
+            assert(val->m_json != nullptr);
+
+            cJSON_AddItemToObject(json, key, val->m_json);
+            val->m_json = nullptr;
+        }
+
+        else if constexpr ((std::is_same_v<T, const char*> || std::is_same_v<T, char*>)) {
             cJSON_AddStringToObject(json, key, val);
         }
 
         else if constexpr(std::is_same_v<T, Json>){
             assert(val.m_json != nullptr);
 
-            cJSON *tmp = val.m_json;
             cJSON_AddItemToObject(json, key, val.m_json);
             val.m_json = nullptr;
         }
+
+
     }
 
     static bool checkDuplication(cJSON *json, const char *key) {
         return cJSON_GetObjectItem(json, key) != nullptr;
+    }
+
+    cJSON *createNode(Json &value) {
+        assert(value.m_json != nullptr);
+
+        cJSON *tmpPtr = value.m_json;
+        value.m_json = nullptr;
+
+        return tmpPtr;
     }
 
     /// Non-static
@@ -178,6 +213,16 @@ class Json {
 
             cJSON *tmpPtr = value->m_json;
             value->m_json = nullptr;
+
+            return tmpPtr;
+        }
+
+        else if constexpr(std::is_same_v<T, Json>){
+            assert(value.m_json != nullptr);
+
+            cJSON *tmpPtr = value.m_json;
+            value.m_json = nullptr;
+
             return tmpPtr;
         }
 
@@ -243,14 +288,10 @@ class Json {
     void Print() {
         assert(m_json != nullptr);
 
-        char * buffer{};
-
-        buffer = cJSON_Print(m_json);
-        printf("%s", buffer);
+        char *buffer = cJSON_Print(m_json);
+        printf("%s\n", buffer);
         cJSON_free(buffer);
     }
 };
-
-
 
 #endif //JSONCLASS_JSON_HPP
