@@ -74,10 +74,22 @@ int main() {
         else
             printf("no value\n");
 
-
         // Printing the whole object
         h.Print();
+
+        // loops
+        Json loop = text;
+        for(auto json : loop.GetChildren()) {
+            json->Print();
+        }
+
+        Json children = loop.GetChildren();
+        for(; !children.IsNull(); children.Next()) {
+            children.Print();
+        }
+
     }
+
 
     printf("Amount of leaked allocations: %d\n", memCounter);
 

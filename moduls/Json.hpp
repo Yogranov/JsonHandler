@@ -7,10 +7,43 @@
 #include "../cJSON/cJSON.h"
 #include "../cJSON/cJSON.h"
 #include <cassert>
-int count = 0;
 
 class Json {
     using json_var_t =  std::variant<bool, char *, const char *, long long, double, Json>;
+
+    enum eType {
+        INVALID = (0),
+        FALSE = (1 << 1),
+        TRUE = (1 << 2),
+        NULL_T = (1 << 3),
+        NUMBER = (1 << 4),
+        STRING = (1 << 5),
+        ARRAY = (1 << 6),
+        OBJECT = (1 << 7),
+        RAW = (1 << 8),
+
+        TYPE_NUM
+    };
+
+    class JsonIterator {
+        public:
+        JsonIterator(Json *obj) : m_ptr(obj){};
+
+        JsonIterator operator++() {
+            m_ptr->Next();
+        }
+
+        Json *operator*() {
+            return m_ptr;
+        }
+
+        bool operator!=(const JsonIterator &other)  {
+            return m_ptr->m_json != nullptr;
+        }
+
+        private:
+        Json *m_ptr;
+    };
 
     class JsonField {
     public:
@@ -66,7 +99,6 @@ class Json {
     Json(cJSON *json) : m_json(json){};
 
     Json(const Json &other) {
-        count++;
         m_json = cJSON_Duplicate(other.m_json,true);
     }
 
@@ -123,7 +155,6 @@ class Json {
     private:
 
     cJSON *m_json;
-
 
     /// ------------ Functions - private ------------ ///
     private:
@@ -245,6 +276,16 @@ class Json {
         return m_json;
     }
 
+    Json GetChildren() {
+        return Json(m_json->child);
+    }
+
+    bool Next() {
+        m_json = m_json->next;
+
+        return m_json != nullptr;
+    }
+
     bool HaveChildren() {
         return m_json->child != nullptr;
     }
@@ -258,31 +299,31 @@ class Json {
     }
 
     bool IsField() {
-        return m_json->valuedouble == 0 || m_json->valueint == 0 || m_json->valuestring == nullptr;
+        return m_json->valuestring != nullptr;
     }
 
     bool IsValid() {
-        return m_json->type != 0;
+        return m_json->type != INVALID;
     }
 
     bool IsNumber() {
-        return m_json->type == (1 << 3);
+        return m_json->type == NUMBER;
     }
 
     bool IsString() {
-        return m_json->type == (1 << 4);
+        return m_json->type == STRING;
     }
 
     bool IsArray() {
-        return m_json->type == (1 << 5);
+        return m_json->type == ARRAY;
     }
 
     bool IsObject() {
-        return m_json->type == (1 << 6);
+        return m_json->type == OBJECT;
     }
 
     bool IsRaw() {
-        return m_json->type == (1 << 7);
+        return m_json->type == RAW;
     }
 
     void Print() {
@@ -292,6 +333,19 @@ class Json {
         printf("%s\n", buffer);
         cJSON_free(buffer);
     }
+
+    /// ------------ Iterator functions ------------ ///
+    public:
+    JsonIterator begin() {
+        return JsonIterator(this);
+    }
+
+    JsonIterator end() {
+        return JsonIterator(nullptr);
+    }
+
 };
+
+
 
 #endif //JSONCLASS_JSON_HPP
