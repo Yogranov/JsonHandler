@@ -77,7 +77,7 @@ int main() {
         // Printing the whole object
         h.Print();
 
-        // loops
+        // Loops
         Json loop = text;
         for(auto json : loop.GetChildren()) {
             json->Print();
@@ -87,6 +87,9 @@ int main() {
         for(; !children.IsNull(); children.Next()) {
             children.Print();
         }
+
+        // Executing lambda in each node
+        loop.LoopThrough([](cJSON *obj){ printf("%s\n", obj->string);});
 
     }
 

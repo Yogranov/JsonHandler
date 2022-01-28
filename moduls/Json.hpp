@@ -7,6 +7,7 @@
 #include "../cJSON/cJSON.h"
 #include "../cJSON/cJSON.h"
 #include <cassert>
+#include <functional>
 
 class Json {
     using json_var_t =  std::variant<bool, char *, const char *, long long, double, Json>;
@@ -332,6 +333,21 @@ class Json {
         char *buffer = cJSON_Print(m_json);
         printf("%s\n", buffer);
         cJSON_free(buffer);
+    }
+
+    void LoopThrough(std::function<void(cJSON *obj)> lmb, cJSON *obj = nullptr) {
+        if(obj == nullptr) {
+            obj = m_json;
+        }
+        cJSON* next = NULL;
+        while (obj != NULL) {
+            next = obj->next;
+            if (!(obj->type & cJSON_IsReference) && (obj->child != NULL)) {
+                LoopThrough(lmb, obj->child);
+            }
+            lmb(obj);
+            obj = next;
+        }
     }
 
     /// ------------ Iterator functions ------------ ///
