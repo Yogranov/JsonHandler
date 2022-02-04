@@ -8,20 +8,21 @@
 #include "../cJSON/cJSON.h"
 #include <cassert>
 #include <functional>
+#include <cstring>
 
 class Json {
     using json_var_t =  std::variant<bool, char *, const char *, long long, double, Json>;
 
     enum eType {
         INVALID = (0),
-        FALSE = (1 << 1),
-        TRUE = (1 << 2),
-        NULL_T = (1 << 3),
-        NUMBER = (1 << 4),
-        STRING = (1 << 5),
-        ARRAY = (1 << 6),
-        OBJECT = (1 << 7),
-        RAW = (1 << 8),
+        FALSE = (1 << 0),
+        TRUE = (1 << 1),
+        NULL_T = (1 << 2),
+        NUMBER = (1 << 3),
+        STRING = (1 << 4),
+        ARRAY = (1 << 5),
+        OBJECT = (1 << 6),
+        RAW = (1 << 7),
 
         TYPE_NUM
     };
@@ -48,7 +49,18 @@ class Json {
 
     class JsonField {
     public:
-        JsonField(const char *field, cJSON *json) : m_field(field), m_json(json){assert(m_json != nullptr);};
+        JsonField(const char *field, cJSON *json) : m_field(field), m_json(json){
+            assert(m_json != nullptr);
+            cJSON *tmpNode = cJSON_GetObjectItem(m_json, field);
+
+            if(tmpNode) {
+                m_json = tmpNode;
+            } else {
+                tmpNode = cJSON_CreateObject();
+                cJSON_AddItemToObject(m_json, field, tmpNode);
+                m_json = tmpNode;
+            }
+        };
 
         template<class T>
         operator std::optional<T>() {
@@ -60,21 +72,21 @@ class Json {
             if(checkDuplication(m_json, m_field))
                 cJSON_DeleteItemFromObject(m_json, m_field);
 
-            addNode(m_field, val, m_json);
+            editNode(val, m_json);
         }
 
         void operator = (Json &json) {
             if(checkDuplication(m_json, m_field))
                 cJSON_DeleteItemFromObject(m_json, m_field);
 
-            addNode(m_field, json, m_json);
+            editNode(json, m_json);
         }
 
         void operator = (Json &&json) {
             if(checkDuplication(m_json, m_field))
                 cJSON_DeleteItemFromObject(m_json, m_field);
 
-            addNode(m_field, &json, m_json);
+            editNode(&json, m_json);
         }
 
         void operator = (std::initializer_list<json_var_t> list) {
@@ -186,6 +198,51 @@ class Json {
     }
 
     template<class T>
+    static void editNode(T val, cJSON *json) {
+        if constexpr(std::is_same_v<T, bool>){
+            json->type = val ? TRUE : FALSE;
+        }
+
+        else if constexpr(std::is_arithmetic_v<T>) {
+            json->type = NUMBER;
+            json->valueint = val;
+            json->valuedouble = val;
+        }
+
+        else if constexpr ((std::is_same_v<T, const char*> || std::is_same_v<T, char*>)) {
+            json->type = STRING;
+            char *stringValue = (char*)cJSON_malloc(strlen(val)+1);
+            strcpy(stringValue, val);
+            json->valuestring = stringValue;
+        }
+
+        else if constexpr(std::is_same_v<T, Json*>){
+            assert(val->m_json != nullptr);
+
+            if(val->m_json->child != nullptr){
+                json->child = val->m_json->child;
+                val->m_json->child = nullptr;
+            } else {
+                cJSON *objToAdd = cJSON_Duplicate(val->m_json, true);
+                cJSON_AddItemToObject(json, val->m_json->string, objToAdd);
+            }
+        }
+
+        else if constexpr(std::is_same_v<T, Json>){
+            assert(val.m_json != nullptr);
+
+            if(val.m_json->child != nullptr){
+                json->child = val.m_json->child;
+                val.m_json->child = nullptr;
+            } else {
+                cJSON *objToAdd = cJSON_Duplicate(val.m_json, true);
+                cJSON_AddItemToObject(json, val.m_json->string, objToAdd);
+            }
+        }
+    }
+
+
+    template<class T>
     static void addNode(const char* key, T val, cJSON *json) {
         if constexpr(std::is_same_v<T, bool>){
             cJSON_AddBoolToObject(json, key, val);
@@ -212,8 +269,6 @@ class Json {
             cJSON_AddItemToObject(json, key, val.m_json);
             val.m_json = nullptr;
         }
-
-
     }
 
     static bool checkDuplication(cJSON *json, const char *key) {
@@ -361,7 +416,5 @@ class Json {
     }
 
 };
-
-
 
 #endif //JSONCLASS_JSON_HPP
