@@ -2,11 +2,44 @@
 #include "cJSON/cJSON.h"
 #include <cstdlib>
 
-
+int memCounter = 0;
+int newCounter = 0;
+std::vector<void *> address;
 
 void *operator new(size_t size) {
+    newCounter++;
+
     return malloc(size);
 }
+
+void operator delete (void *memory) {
+    newCounter--;
+
+    free(memory);
+}
+
+void *my_malloc(size_t size) {
+    memCounter++;
+    void *pointer = malloc(size);
+
+    address.push_back((void *)pointer);
+    return pointer;
+}
+
+void my_free(void *pointer) {
+    if(pointer == nullptr)
+        return;
+
+    memCounter--;
+    address.erase(std::remove(address.begin(), address.end(), (void *)pointer), address.end());
+    free(pointer);
+}
+
+void change_allocators() {
+    cJSON_Hooks custom_allocators = {my_malloc, my_free};
+    cJSON_InitHooks(&custom_allocators);
+}
+
 
 const char text[] = ""
                         "{"
@@ -16,27 +49,6 @@ const char text[] = ""
                             "\"my_bool\": true"
                         "}"
                     "";
-
-int memCounter = 0;
-
-void *my_malloc(size_t size) {
-    memCounter++;
-    void *pointer = malloc(size);
-    return pointer;
-}
-
-void my_free(void *pointer) {
-    if(pointer == nullptr)
-        return;
-
-    memCounter--;
-    free(pointer);
-}
-
-void change_allocators() {
-    cJSON_Hooks custom_allocators = {my_malloc, my_free};
-    cJSON_InitHooks(&custom_allocators);
-}
 
 int main() {
     change_allocators();
@@ -93,7 +105,7 @@ int main() {
 
     }
 
-
-    printf("Amount of leaked allocations: %d\n", memCounter);
+    printf("Amount of leaked c allocations: %d\n", memCounter);
+    printf("Amount of leaked 'new' allocations: %d\n", memCounter);
 
 }
