@@ -89,11 +89,11 @@ class Json {
             editNode(&json, m_json);
         }
 
-        void operator = (std::initializer_list<json_var_t> list) {
+        void operator = (std::initializer_list<json_var_t> &list) {
             if(checkDuplication(m_json, m_field))
                 cJSON_DeleteItemFromObject(m_json, m_field);
 
-            *this = Json{list};
+            m_json->type = ARRAY;
         }
 
         JsonField operator[] (const char *key) {
@@ -126,17 +126,8 @@ class Json {
         cJSON_AddItemToObject(m_json, key, createNode(value));
     };
 
-    Json(std::initializer_list<json_var_t> &list) : m_json(cJSON_CreateArray()){
-        for(json_var_t item : list) {
-            cJSON *tmpNode{};
-
-            if(std::holds_alternative<Json>(item))
-                tmpNode = createNode(std::get<Json>(item));
-            else
-                std::visit([this, &tmpNode] (const auto &arg){tmpNode = createNode(arg);}, item);
-
-            cJSON_AddItemToArray(m_json, tmpNode);
-        }
+    Json(std::initializer_list<json_var_t> list) : m_json(cJSON_CreateArray()){
+        initializerConstructorLoop(list, m_json);
     };
 
     /// Private constructor, use by initializer list to build an array
@@ -220,6 +211,7 @@ class Json {
 
             if(val->m_json->child != nullptr){
                 json->child = val->m_json->child;
+                json->type = val->m_json->type;
                 val->m_json->child = nullptr;
             } else {
                 cJSON *objToAdd = cJSON_Duplicate(val->m_json, true);
@@ -317,6 +309,19 @@ class Json {
         }
 
         assert(0);
+    }
+
+    void initializerConstructorLoop(std::initializer_list<json_var_t> list, cJSON *json) {
+        for(json_var_t item : list) {
+            cJSON *tmpNode{};
+
+            if(std::holds_alternative<Json>(item))
+                tmpNode = createNode(std::get<Json>(item));
+            else
+                std::visit([this, &tmpNode] (const auto &arg){tmpNode = createNode(arg);}, item);
+
+            cJSON_AddItemToArray(json, tmpNode);
+        }
     }
 
     /// ------------ Functions - public ------------ ///
