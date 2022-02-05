@@ -64,7 +64,7 @@ class Json {
 
         template<class T>
         operator std::optional<T>() {
-            return get<T>(cJSON_GetObjectItem(m_json, m_field));
+            return get<T>(m_json);
         }
 
         template<class T>
@@ -183,14 +183,13 @@ class Json {
 
         else if constexpr(std::is_arithmetic_v<T>) {
             if(cJSON_IsNumber(json)){
-                double tmp = cJSON_GetNumberValue(json);
-                return tmp;
+                return json->valuedouble;
             }
         }
 
-        else if constexpr (std::is_pointer_v<T>) {
+        else if constexpr (std::is_same_v<T, char *> || std::is_same_v<T, const char *>) {
             if(cJSON_IsString(json)){
-                return cJSON_GetStringValue(json);
+                return json->valuestring;
             }
         }
 
