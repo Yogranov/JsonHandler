@@ -107,7 +107,7 @@ class Json {
 
     /// ------------ Constructors ------------ ///
     public:
-    Json() : m_json(cJSON_CreateObject()){};
+//    Json() : m_json(cJSON_CreateObject()){};
     Json(const char* jsonString) : m_json(cJSON_Parse(jsonString)) { assert(m_json != nullptr);};
     Json(cJSON *json) : m_json(json){};
 
@@ -205,20 +205,6 @@ class Json {
             strcpy(stringValue, val);
             json->valuestring = stringValue;
         }
-
-        else if constexpr(std::is_same_v<T, Json*>){
-            assert(val->m_json != nullptr);
-
-            if(val->m_json->child != nullptr){
-                json->child = val->m_json->child;
-                json->type = val->m_json->type;
-                val->m_json->child = nullptr;
-            } else {
-                cJSON *objToAdd = cJSON_Duplicate(val->m_json, true);
-                cJSON_AddItemToObject(json, val->m_json->string, objToAdd);
-            }
-        }
-
         else if constexpr(std::is_same_v<T, Json>){
             assert(val.m_json != nullptr);
 
@@ -230,8 +216,20 @@ class Json {
                 cJSON_AddItemToObject(json, val.m_json->string, objToAdd);
             }
         }
-    }
 
+        else if constexpr(std::is_same_v<T, Json*>){
+            assert(val->m_json != nullptr);
+
+            if(val->m_json->child != nullptr) {
+                json->child = val->m_json->child;
+                json->type = val->m_json->type;
+                val->m_json->child = nullptr;
+            } else {
+                json->type = val->m_json->type;
+                cJSON_AddItemToObject(json, val->m_json->string, val->m_json);
+            }
+        }
+    }
 
     template<class T>
     static void addNode(const char* key, T val, cJSON *json) {

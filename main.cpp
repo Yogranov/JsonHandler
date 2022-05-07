@@ -64,6 +64,10 @@ int main() {
         // Adding an array
         h["json"] = {1,2,3};
 
+        // Adding an empty array
+        z["array"] = {};
+        z.Print();
+
         // Rewrite to the same key
         h["json"] = 44;
 
@@ -106,6 +110,5 @@ int main() {
     }
 
     printf("Amount of leaked c allocations: %d\n", memCounter);
-    printf("Amount of leaked 'new' allocations: %d\n", memCounter);
 
 }
